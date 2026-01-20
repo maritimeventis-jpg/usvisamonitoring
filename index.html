@@ -88,8 +88,7 @@
     </div>
 
     <script>
-        // INSERT YOUR CSV LINK HERE
-        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmgULO4kJ6-VPR3gYwOZVlhPbDIa2qrTcm6aNrhiCCIF5jL7CxQvYn0pMyxe81ve5_gkFMNqmIJbqi/pubhtml';
+        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmgULO4kJ6-VPR3gYwOZVlhPbDIa2qrTcm6aNrhiCCIF5jL7CxQvYn0pMyxe81ve5_gkFMNqmIJbqi/pub?output=csv';
 
         let DATA = {
             global: { RELEASED: 0, APPLIED: 0, PENDING: 0, ONHOLD: 0, CANCEL: 0, REJECTED: 0 },
@@ -104,6 +103,7 @@
             Papa.parse(sheetUrl, {
                 download: true,
                 header: true,
+                skipEmptyLines: true,
                 complete: function(results) {
                     processSheetData(results.data);
                     document.getElementById('syncStatus').innerText = "Database Synchronized";
@@ -116,8 +116,6 @@
         function processSheetData(rawRows) {
             DATA.records = [];
             DATA.global = { RELEASED: 0, APPLIED: 0, PENDING: 0, ONHOLD: 0, CANCEL: 0, REJECTED: 0 };
-            
-            // Force initialize these fleets so they always show up in charts
             const fleetNames = ["OSS", "KRBS/PCC", "KRBS/BULK", "TANKER", "PRS"];
             DATA.fleets = {};
             fleetNames.forEach(fn => {
@@ -125,34 +123,49 @@
             });
 
             rawRows.forEach(row => {
-                if (!row['NAME'] && !row['FLEET']) return;
+                const keys = Object.keys(row);
+                const find = (word) => keys.find(k => k.toUpperCase().includes(word.toUpperCase()));
+
+                const colName = find('NAME');
+                const colFleet = find('FLEET');
+                const colStatus = find('STATUS');
+                const colUser = find('USERNAME');
+                const colPass = find('PASSWORD');
+                const colSec1 = find('SEC 1') || find('MIDDLE NAME');
+                const colSec2 = find('SEC 2') || find('CITY');
+                const colSec3 = find('SEC 3') || find('DFA');
+                const colApp = find('APPLICATION') || find('CODE');
+
+                if (!row[colName]) return;
 
                 const record = {
-                    f: row['FLEET'] || "N/A",
-                    s: (row['STATUS'] || "PENDING").toUpperCase().trim(),
-                    n: row['NAME'] || "UNKNOWN",
-                    u: row['USERNAME'] || "",
-                    p: row['PASSWORD (Visa2025)'] || "",
-                    s1: row['SEC 1 (MIDDLE NAME)'] || "",
-                    s2: row['SEC 2 (CITY OF PLACE OF BIRTH)'] || "",
-                    s3: row['SEC 3 (DFA ISSUE)'] || "",
-                    c: row['APPLICATION CODE'] || ""
+                    f: (row[colFleet] || "N/A").trim(),
+                    s: (row[colStatus] || "PENDING").toUpperCase().trim(),
+                    n: (row[colName] || "UNKNOWN").trim(),
+                    u: (row[colUser] || "").trim(),
+                    p: (row[colPass] || "").trim(),
+                    s1: (row[colSec1] || "").trim(),
+                    s2: (row[colSec2] || "").trim(),
+                    s3: (row[colSec3] || "").trim(),
+                    c: (row[colApp] || "").trim()
                 };
 
                 DATA.records.push(record);
 
                 let sKey = record.s;
-                if (sKey.includes('RELEASED') || sKey.includes('APPROVED')) sKey = 'RELEASED';
-                if (sKey.includes('APPLIED')) sKey = 'APPLIED';
-                if (sKey.includes('PENDING')) sKey = 'PENDING';
-                if (sKey.includes('HOLD')) sKey = 'ONHOLD';
-                if (sKey.includes('CANCEL')) sKey = 'CANCEL';
-                if (sKey.includes('REJECT')) sKey = 'REJECTED';
+                if (sKey.includes('RELEASE') || sKey.includes('APPROV')) sKey = 'RELEASED';
+                else if (sKey.includes('APPLI')) sKey = 'APPLIED';
+                else if (sKey.includes('PEND')) sKey = 'PENDING';
+                else if (sKey.includes('HOLD')) sKey = 'ONHOLD';
+                else if (sKey.includes('CANCEL')) sKey = 'CANCEL';
+                else if (sKey.includes('REJECT')) sKey = 'REJECTED';
+                else sKey = 'PENDING';
                 
                 if (DATA.global.hasOwnProperty(sKey)) DATA.global[sKey]++;
-                if (DATA.fleets[record.f] && DATA.fleets[record.f].hasOwnProperty(sKey)) {
-                    DATA.fleets[record.f][sKey]++;
+                if (!DATA.fleets[record.f]) {
+                    DATA.fleets[record.f] = { RELEASED: 0, APPLIED: 0, PENDING: 0, ONHOLD: 0, CANCEL: 0, REJECTED: 0 };
                 }
+                DATA.fleets[record.f][sKey]++;
             });
         }
 
@@ -179,10 +192,9 @@
             const head = document.getElementById('tableHead');
             const body = document.getElementById('tableBody');
 
-            // Logic for specific columns in specific tabs
             let cols = (activeTab === 'monitoring') 
                 ? ["FLEET", "STATUS", "NAME", "USERNAME", "PASSWORD", "SEC 1", "SEC 2", "SEC 3", "APP CODE"]
-                : ["FLEET", "NAME", "USERNAME", "APP CODE"]; // Your requested headers for specific tabs
+                : ["FLEET", "NAME", "USERNAME", "APP CODE"];
 
             head.innerHTML = `<tr>${cols.map(c => `<th class="p-4">${c}</th>`).join('')}</tr>`;
 
@@ -201,7 +213,7 @@
                 const cells = (activeTab === 'monitoring') 
                     ? [r.f, r.s, r.n, r.u, r.p, r.s1, r.s2, r.s3, r.c] 
                     : [r.f, r.n, r.u, r.c];
-                return `<tr class="hover:bg-slate-50 transition">${cells.map((cell, i) => `<td class="p-4 ${i===0?'font-black':''}">${cell}</td>`).join('')}</tr>`;
+                return `<tr class="hover:bg-slate-50 transition">${cells.map((cell, i) => `<td class="p-4 ${i===0?'font-black text-slate-900':''}">${cell}</td>`).join('')}</tr>`;
             }).join('');
         }
 
