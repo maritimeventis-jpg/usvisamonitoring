@@ -27,7 +27,7 @@
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-xl font-black tracking-tighter italic">FLEET VISA TRACKER 2026</h1>
             <div class="flex items-center gap-4">
-                <span id="syncStatus" class="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-1 rounded border border-amber-500/30 font-bold uppercase">Connecting...</span>
+                <span id="syncStatus" class="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-1 rounded border border-amber-500/30 font-bold uppercase">Connecting to Master Sheet...</span>
             </div>
         </div>
     </header>
@@ -89,9 +89,8 @@
 
     <script>
         // STEP 2: PASTE YOUR CSV LINK HERE
-        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJIz6yCHXgwNH2NdBqQZoiPy2pmApDxKOb6gOE1gd5yNCfZDimuoHVJ-mc4RGGXDty_KTYzHpaDSwK/pub?gid=0&single=true&output=csv';
+        const sheetUrl = 'PASTE_YOUR_CSV_LINK_HERE';
 
-        // Placeholder for data that will be filled by Google Sheets
         let DATA = {
             global: { RELEASED: 0, APPLIED: 0, PENDING: 0, ONHOLD: 0, CANCEL: 0, REJECTED: 0 },
             fleets: {},
@@ -101,7 +100,6 @@
         let activeTab = 'monitoring';
         let activeCharts = [];
 
-        // STEP 3: THE SYNC FUNCTION
         function initSync() {
             Papa.parse(sheetUrl, {
                 download: true,
@@ -110,25 +108,23 @@
                     processSheetData(results.data);
                     document.getElementById('syncStatus').innerText = "Database Synchronized";
                     document.getElementById('syncStatus').className = "text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded border border-emerald-500/30 font-bold uppercase";
-                    switchTab('monitoring'); // Start the view once data is in
+                    switchTab('monitoring'); 
                 },
                 error: function(err) {
-                    document.getElementById('syncStatus').innerText = "Sync Error";
-                    console.error(err);
+                    document.getElementById('syncStatus').innerText = "Sync Failed";
+                    console.error("CSV Error:", err);
                 }
             });
         }
 
         function processSheetData(rawRows) {
-            // Clear old data
             DATA.records = [];
             DATA.global = { RELEASED: 0, APPLIED: 0, PENDING: 0, ONHOLD: 0, CANCEL: 0, REJECTED: 0 };
             DATA.fleets = {};
 
             rawRows.forEach(row => {
-                if (!row.NAME && !row.FLEET) return; // Skip empty rows
+                if (!row.NAME && !row.FLEET) return;
 
-                // Map Sheet headers to your logic
                 const record = {
                     f: row.FLEET || "N/A",
                     s: (row.STATUS || "PENDING").toUpperCase(),
@@ -143,22 +139,19 @@
 
                 DATA.records.push(record);
 
-                // Update Global Stats
-                let statusKey = record.s;
-                if (statusKey === 'HOLD') statusKey = 'ONHOLD';
-                if (statusKey === 'CANCELED') statusKey = 'CANCEL';
+                // Handle Status Keys for Stats
+                let sKey = record.s;
+                if (sKey === 'HOLD' || sKey === 'ON-HOLD') sKey = 'ONHOLD';
+                if (sKey === 'CANCELED' || sKey === 'CANCELLED') sKey = 'CANCEL';
                 
-                if (DATA.global.hasOwnProperty(statusKey)) {
-                    DATA.global[statusKey]++;
-                }
+                // Increment Global
+                if (DATA.global.hasOwnProperty(sKey)) DATA.global[sKey]++;
 
-                // Update Fleet Stats
+                // Increment Fleet
                 if (!DATA.fleets[record.f]) {
                     DATA.fleets[record.f] = { RELEASED: 0, APPLIED: 0, PENDING: 0, ONHOLD: 0, CANCEL: 0, REJECTED: 0 };
                 }
-                if (DATA.fleets[record.f].hasOwnProperty(statusKey)) {
-                    DATA.fleets[record.f][statusKey]++;
-                }
+                if (DATA.fleets[record.f].hasOwnProperty(sKey)) DATA.fleets[record.f][sKey]++;
             });
         }
 
@@ -179,7 +172,6 @@
             document.getElementById('tableView').style.display = isOv ? 'none' : 'block';
             document.getElementById('overviewSection').style.display = isOv ? 'block' : 'none';
             document.getElementById('filterControls').style.opacity = isOv ? '0' : '1';
-            document.getElementById('filterControls').style.pointerEvents = isOv ? 'none' : 'auto';
 
             if (isOv) renderOverview(); else renderTable();
         }
@@ -217,9 +209,13 @@
             activeCharts.forEach(c => c.destroy());
             activeCharts = [];
 
-            const gGrid = document.getElementById('globalStatsGrid');
             const colors = { RELEASED: 'text-emerald-600', APPLIED: 'text-blue-600', PENDING: 'text-orange-500', ONHOLD: 'text-slate-500', CANCEL: 'text-red-600', REJECTED: 'text-rose-900' };
-            gGrid.innerHTML = Object.entries(DATA.global).map(([k,v]) => `<div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-center"><p class="text-[9px] font-bold text-slate-400 uppercase mb-1">${k}</p><p class="text-3xl font-black ${colors[k]}">${v}</p></div>`).join('');
+            
+            document.getElementById('globalStatsGrid').innerHTML = Object.entries(DATA.global).map(([k,v]) => `
+                <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-center">
+                    <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">${k}</p>
+                    <p class="text-3xl font-black ${colors[k]}">${v}</p>
+                </div>`).join('');
 
             const ctxDonut = document.getElementById('mainDonutChart').getContext('2d');
             activeCharts.push(new Chart(ctxDonut, {
@@ -228,8 +224,7 @@
                 options: { cutout: '85%', plugins: { legend: { display: false } } }
             }));
 
-            const fGrid = document.getElementById('fleetComparisonGrid');
-            fGrid.innerHTML = Object.entries(DATA.fleets).map(([name, stats], i) => `
+            document.getElementById('fleetComparisonGrid').innerHTML = Object.entries(DATA.fleets).map(([name, stats], i) => `
                 <div class="bg-white p-6 rounded-3xl border shadow-sm fleet-card">
                     <div class="flex justify-between items-start mb-6">
                         <div><p class="text-[10px] font-black text-slate-400 uppercase">Fleet Unit</p><h3 class="text-lg font-black text-slate-800">${name}</h3></div>
@@ -248,7 +243,6 @@
             });
         }
 
-        // Start the Sync process on page load
         window.onload = initSync;
     </script>
 </body>
